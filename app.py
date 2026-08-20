@@ -312,15 +312,22 @@ if municipio_filter:
 if selected_cnae_codes and "cnae_fiscal" in df.columns:
     df = filter_by_cnae(df, selected_cnae_codes)
 
-# Geocodificação
-if not df.empty and ("latitude" not in df.columns or "longitude" not in df.columns):
+# Geocodificação e Enriquecimento BrasilAPI
+if not df.empty:
     if len(df) <= 200:
-        with st.spinner("🌍 Geocodificando municípios..."):
-            df = enrich_with_coordinates(df)
+        # Enriquecer CNPJ (Porte, Telefone, CNAE extra)
+        if "porte" not in df.columns:
+            with st.spinner("🏢 Consultando CNPJs na BrasilAPI (Porte/CNAE)..."):
+                df = enrich_with_brasilapi(df)
+
+        # Geocodificação
+        if "latitude" not in df.columns or "longitude" not in df.columns:
+            with st.spinner("🌍 Geocodificando municípios..."):
+                df = enrich_with_coordinates(df)
     else:
         st.info(
             f"ℹ️ {len(df)} resultados encontrados. "
-            "Refine os filtros para geocodificar (máx. 200 registros no mapa)."
+            "Refine os filtros para geocodificar e buscar dados de porte (máx. 200 registros)."
         )
 
 # Filtro por raio
@@ -512,7 +519,7 @@ if not df.empty:
     # Selecionar colunas para exibição
     display_cols = []
     for col in [
-        "sif", "razao_social", "cnpj", "classificacao", "cnae_fiscal",
+        "sif", "razao_social", "cnpj", "porte", "natureza_juridica", "classificacao", "cnae_fiscal",
         "municipio", "uf", "endereco", "cep", "telefone", "telefone_1",
         "situacao", "distancia_km",
     ]:

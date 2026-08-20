@@ -245,6 +245,8 @@ def enrich_with_brasilapi(df: pd.DataFrame, cnpj_column: str = "cnpj") -> pd.Dat
         "cnae_fiscal": [],
         "cnae_descricao": [],
         "telefone_1": [],
+        "porte": [],
+        "natureza_juridica": [],
     }
 
     progress = st.progress(0, text="Enriquecendo dados via BrasilAPI...")
@@ -263,10 +265,14 @@ def enrich_with_brasilapi(df: pd.DataFrame, cnpj_column: str = "cnpj") -> pd.Dat
             new_data["telefone_1"].append(
                 details.get("ddd_telefone_1", "")
             )
+            new_data["porte"].append(details.get("porte", ""))
+            new_data["natureza_juridica"].append(details.get("natureza_juridica", ""))
         else:
             new_data["cnae_fiscal"].append("")
             new_data["cnae_descricao"].append("")
             new_data["telefone_1"].append("")
+            new_data["porte"].append("")
+            new_data["natureza_juridica"].append("")
 
         progress.progress((idx + 1) / total, text=f"BrasilAPI: {idx + 1}/{total}")
 
