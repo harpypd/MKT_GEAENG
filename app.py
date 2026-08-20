@@ -528,15 +528,52 @@ if not df.empty:
     else:
         st.dataframe(df.head(500), use_container_width=True, height=400)
 
-    # Download CSV
-    csv_data = df.to_csv(index=False, sep=";", encoding="utf-8")
-    st.download_button(
-        label="📥 Download CSV dos resultados",
-        data=csv_data,
-        file_name=f"prospeccao_b2b_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
-        mime="text/csv",
-        use_container_width=True,
-    )
+    # Preparar Dados para Download Normal e Meta Ads
+    col_dl1, col_dl2 = st.columns(2)
+    
+    with col_dl1:
+        # Download CSV Normal
+        csv_data = df.to_csv(index=False, sep=";", encoding="utf-8")
+        st.download_button(
+            label="📥 Download CSV (Completo)",
+            data=csv_data,
+            file_name=f"prospeccao_b2b_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+
+    with col_dl2:
+        # Gerar CSV Formato Meta Ads (Custom Audience)
+        meta_df = pd.DataFrame()
+        
+        # Telefone (com código do país)
+        tel_col = "telefone_1" if "telefone_1" in df.columns else ("telefone" if "telefone" in df.columns else None)
+        if tel_col:
+            meta_df["phone"] = df[tel_col].astype(str).str.replace(r"\D", "", regex=True)
+            meta_df["phone"] = meta_df["phone"].apply(lambda x: f"55{x}" if len(x) >= 10 else "")
+        else:
+            meta_df["phone"] = ""
+            
+        # Outros campos
+        if "cep" in df.columns:
+            meta_df["zip"] = df["cep"].astype(str).str.replace(r"\D", "", regex=True)
+        if "municipio" in df.columns:
+            meta_df["ct"] = df["municipio"]
+        if "uf" in df.columns:
+            meta_df["st"] = df["uf"]
+            
+        meta_df["country"] = "BR"
+        
+        # O Meta Ads usa vírgula como separador padrão
+        meta_csv = meta_df.to_csv(index=False, sep=",", encoding="utf-8")
+        st.download_button(
+            label="🎯 Exportar para Meta Ads (Públicos)",
+            data=meta_csv,
+            file_name=f"meta_ads_audience_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+            mime="text/csv",
+            use_container_width=True,
+            help="Arquivo formatado (phone, zip, ct, st, country) para criar Públicos Personalizados no Facebook/Instagram."
+        )
 else:
     st.info("🔍 Nenhum resultado encontrado. Ajuste os filtros no painel lateral.")
 

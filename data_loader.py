@@ -122,6 +122,9 @@ def _normalize_sigsif_columns(df: pd.DataFrame) -> pd.DataFrame:
     Normaliza nomes de colunas do SIGSIF para um padrão consistente.
     O CSV pode ter variações nos nomes de coluna entre versões.
     """
+    # Remover colunas duplicadas (ex: duas colunas 'telefone')
+    df = df.loc[:, ~df.columns.duplicated()]
+
     # Limpar espaços e converter para minúsculo
     df.columns = [col.strip().lower().replace(" ", "_") for col in df.columns]
 
