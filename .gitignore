@@ -1,0 +1,55 @@
+# ===== AMBIENTE =====
+.env
+.env.*
+!.env.example
+
+# ===== PYTHON =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+eggs/
+*.egg
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ===== VIRTUAL ENV =====
+venv/
+.venv/
+ENV/
+
+# ===== BANCO DE DADOS =====
+*.sqlite
+*.sqlite3
+*.db
+
+# ===== LOGS =====
+*.log
+logs/
+
+# ===== STREAMLIT =====
+.streamlit/secrets.toml
+
+# ===== DADOS / CACHE =====
+data/*.csv
+data/*.json
+*.cache
+.cache/
+geocode_cache.json
+geocode_cache.pkl
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+desktop.ini
