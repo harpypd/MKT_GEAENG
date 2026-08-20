@@ -437,7 +437,12 @@ def filter_by_status(df: pd.DataFrame, status: str = "Ativo") -> pd.DataFrame:
         return df
     if status == "Todos":
         return df
-    return df[df["situacao"].str.contains(status, case=False, na=False)]
+    
+    # O SIGSIF usa "A" para ativo
+    search_term = "A" if status == "Ativo" else status
+    # Usar igualdade ou startswith, já que contains("A") pode dar falso positivo em outras coisas se houvesse,
+    # mas o CSV contém exatamente a letra "A"
+    return df[df["situacao"].str.upper() == search_term.upper()]
 
 
 def filter_by_uf(df: pd.DataFrame, uf: str) -> pd.DataFrame:
