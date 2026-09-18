@@ -252,7 +252,7 @@ def enrich_with_brasilapi(df: pd.DataFrame, cnpj_column: str = "cnpj") -> pd.Dat
     progress = st.progress(0, text="Enriquecendo dados via BrasilAPI...")
     total = len(df)
 
-    for idx, row in df.iterrows():
+    for i, (_, row) in enumerate(df.iterrows()):
         cnpj = row.get(cnpj_column, "")
         details = fetch_cnpj_details(cnpj) if cnpj else None
 
@@ -274,7 +274,7 @@ def enrich_with_brasilapi(df: pd.DataFrame, cnpj_column: str = "cnpj") -> pd.Dat
             new_data["porte"].append("")
             new_data["natureza_juridica"].append("")
 
-        progress.progress((idx + 1) / total, text=f"BrasilAPI: {idx + 1}/{total}")
+        progress.progress((i + 1) / total, text=f"BrasilAPI: {i + 1}/{total}")
 
     progress.empty()
 
