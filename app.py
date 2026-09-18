@@ -175,6 +175,13 @@ with st.sidebar:
 
     st.markdown("### 🔍 Filtros de Prospecção")
 
+    porte_filter = st.multiselect(
+        "🏢 Porte da Empresa",
+        options=["MICRO EMPRESA", "EMPRESA DE PEQUENO PORTE", "DEMAIS"],
+        default=[],
+        help="Filtro aplicado após enriquecimento de CNPJ."
+    )
+
     # CNAE
     cnae_options = [f"{code} — {desc}" for code, desc in CNAE_ALIMENTICIO.items()]
     selected_cnae_labels = st.multiselect(
@@ -222,19 +229,31 @@ with st.sidebar:
     radius_km = 100
     radius_city = ""
     radius_uf = ""
+    radius_mode = "Cidade e Estado"
 
     if enable_radius:
-        radius_city = st.text_input(
-            "Cidade de referência",
-            value="",
-            placeholder="Ex: Campinas",
-        )
-        radius_uf = st.selectbox(
-            "UF de referência",
-            options=UFS_BRASIL,
-            index=25,  # SP
-            key="radius_uf",
-        )
+        radius_mode = st.radio("Definir centro por:", ["Cidade e Estado", "Pinpoint no Mapa"])
+
+        if radius_mode == "Cidade e Estado":
+            radius_city = st.text_input(
+                "Cidade de referência",
+                value="",
+                placeholder="Ex: Campinas",
+            )
+            radius_uf = st.selectbox(
+                "UF de referência",
+                options=UFS_BRASIL,
+                index=25,  # SP
+                key="radius_uf",
+            )
+        else:
+            lat = st.session_state.get("pinpoint_lat")
+            lon = st.session_state.get("pinpoint_lon")
+            if lat and lon:
+                st.success(f"📍 Ponto selecionado: {lat:.4f}, {lon:.4f}")
+            else:
+                st.info("👇 Clique no mapa abaixo para definir o ponto central.")
+
         radius_km = st.slider(
             "Raio (km)",
             min_value=10,
@@ -314,32 +333,45 @@ if selected_cnae_codes and "cnae_fiscal" in df.columns:
 
 # Geocodificação e Enriquecimento BrasilAPI
 if not df.empty:
+    # 1. Enriquecimento BrasilAPI (apenas se <= 200)
     if len(df) <= 200:
-        # Enriquecer CNPJ (Porte, Telefone, CNAE extra)
         if "porte" not in df.columns:
             with st.spinner("🏢 Consultando CNPJs na BrasilAPI (Porte/CNAE)..."):
                 df = enrich_with_brasilapi(df)
-
-        # Geocodificação
-        if "latitude" not in df.columns or "longitude" not in df.columns:
-            with st.spinner("🌍 Geocodificando municípios..."):
-                df = enrich_with_coordinates(df)
     else:
         st.info(
             f"ℹ️ {len(df)} resultados encontrados. "
-            "Refine os filtros para geocodificar e buscar dados de porte (máx. 200 registros)."
+            "Refine os filtros para buscar dados de porte na BrasilAPI (máx. 200 registros)."
         )
 
+    # Aplica filtro de Porte (se ativado e dados disponíveis)
+    if porte_filter and "porte" in df.columns:
+        df = df[df["porte"].isin(porte_filter)]
+
+    # 2. Geocodificação (se <= 200 ou se o filtro de Raio estiver ativado)
+    if len(df) <= 200 or enable_radius:
+        if "latitude" not in df.columns or "longitude" not in df.columns:
+            with st.spinner("🌍 Geocodificando municípios (pode demorar na primeira vez)..."):
+                df = enrich_with_coordinates(df)
+
 # Filtro por raio
-if enable_radius and radius_city and "latitude" in df.columns:
-    center_coords = geocode_city(radius_city, radius_uf)
+if enable_radius and "latitude" in df.columns:
+    center_coords = None
+    if radius_mode == "Cidade e Estado" and radius_city:
+        center_coords = geocode_city(radius_city, radius_uf)
+        if not center_coords:
+            st.warning(f"⚠️ Não foi possível geocodificar '{radius_city}/{radius_uf}'.")
+    elif radius_mode == "Pinpoint no Mapa":
+        lat = st.session_state.get("pinpoint_lat")
+        lon = st.session_state.get("pinpoint_lon")
+        if lat and lon:
+            center_coords = (lat, lon)
+
     if center_coords:
         df = filter_by_radius(df, center_coords[0], center_coords[1], radius_km)
         if "_distancia_km" in df.columns:
             df["distancia_km"] = df["_distancia_km"].round(1)
             df = df.drop(columns=["_distancia_km"], errors="ignore")
-    else:
-        st.warning(f"⚠️ Não foi possível geocodificar '{radius_city}/{radius_uf}'.")
 
 
 # ============================================
@@ -394,22 +426,53 @@ with kpi4:
 # ============================================
 st.markdown('<p class="section-header">🗺️ Mapa de Prospecção — Satélite Esri</p>', unsafe_allow_html=True)
 
+df_map = pd.DataFrame()
 if "latitude" in df.columns and "longitude" in df.columns:
     df_map = df.dropna(subset=["latitude", "longitude"]).copy()
 
+show_map = not df_map.empty or (enable_radius and radius_mode == "Pinpoint no Mapa")
+
+if show_map:
+    # Centro do mapa padrão (Brasil central)
+    center_lat, center_lon = -15.7801, -47.9292
+    zoom = 4
+
     if not df_map.empty:
-        # Centro do mapa: média das coordenadas
         center_lat = df_map["latitude"].astype(float).mean()
         center_lon = df_map["longitude"].astype(float).mean()
+        zoom = 6
+    elif st.session_state.get("pinpoint_lat") and st.session_state.get("pinpoint_lon"):
+        center_lat = st.session_state["pinpoint_lat"]
+        center_lon = st.session_state["pinpoint_lon"]
+        zoom = 8
 
-        # Criar mapa com satélite Esri
-        m = folium.Map(
-            location=[center_lat, center_lon],
-            zoom_start=6,
-            tiles=ESRI_SATELLITE_TILES,
-            attr=ESRI_ATTRIBUTION,
-        )
+    # Criar mapa com satélite Esri
+    m = folium.Map(
+        location=[center_lat, center_lon],
+        zoom_start=zoom,
+        tiles=ESRI_SATELLITE_TILES,
+        attr=ESRI_ATTRIBUTION,
+    )
 
+    # Adicionar marcador de Pinpoint e Raio
+    pp_lat = st.session_state.get("pinpoint_lat")
+    pp_lon = st.session_state.get("pinpoint_lon")
+    if enable_radius and radius_mode == "Pinpoint no Mapa" and pp_lat and pp_lon:
+        folium.Marker(
+            location=[pp_lat, pp_lon],
+            icon=folium.Icon(color="red", icon="crosshairs", prefix="fa"),
+            tooltip="Centro da Busca por Raio"
+        ).add_to(m)
+
+        folium.Circle(
+            location=[pp_lat, pp_lon],
+            radius=radius_km * 1000,
+            color="red",
+            fill=True,
+            fill_opacity=0.1
+        ).add_to(m)
+
+    if not df_map.empty:
         # MarkerCluster
         marker_cluster = MarkerCluster(name="Estabelecimentos SIF").add_to(m)
 
@@ -496,18 +559,25 @@ if "latitude" in df.columns and "longitude" in df.columns:
                 icon=folium.Icon(color="green", icon="industry", prefix="fa"),
             ).add_to(marker_cluster)
 
-        # Renderizar mapa
-        st.markdown('<div class="map-container">', unsafe_allow_html=True)
-        st_folium(m, width=None, height=520, use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+    # Renderizar mapa
+    st.markdown('<div class="map-container">', unsafe_allow_html=True)
+    map_data = st_folium(m, width=None, height=520, use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Capturar clique no mapa (Pinpoint mode)
+    if enable_radius and radius_mode == "Pinpoint no Mapa" and map_data and map_data.get("last_clicked"):
+        new_lat = map_data["last_clicked"]["lat"]
+        new_lon = map_data["last_clicked"]["lng"]
+        
+        # Atualizar apenas se mudou (para não entrar em loop de rerun)
+        if st.session_state.get("pinpoint_lat") != new_lat or st.session_state.get("pinpoint_lon") != new_lon:
+            st.session_state["pinpoint_lat"] = new_lat
+            st.session_state["pinpoint_lon"] = new_lon
+            st.rerun()
 
-    else:
-        st.info("📍 Nenhum estabelecimento com coordenadas para exibir no mapa.")
 else:
     if not df.empty:
-        st.info(
-            "📍 Refine os filtros (máx. 200 resultados) para visualizar no mapa."
-        )
+        st.info("📍 Refine os filtros (ou ative a Busca por Raio no mapa) para visualizar geolocalização.")
 
 
 # ============================================
@@ -556,8 +626,8 @@ if not df.empty:
         # Telefone (com código do país)
         tel_col = "telefone_1" if "telefone_1" in df.columns else ("telefone" if "telefone" in df.columns else None)
         if tel_col:
-            meta_df["phone"] = df[tel_col].astype(str).str.replace(r"\D", "", regex=True)
-            meta_df["phone"] = meta_df["phone"].apply(lambda x: f"55{x}" if len(x) >= 10 else "")
+            meta_df["phone"] = df[tel_col].astype(str).str.replace(r"\D", "", regex=True).fillna("")
+            meta_df["phone"] = meta_df["phone"].apply(lambda x: f"55{str(x)}" if pd.notna(x) and len(str(x)) >= 10 else "")
         else:
             meta_df["phone"] = ""
             
